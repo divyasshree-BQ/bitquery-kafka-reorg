@@ -97,7 +97,7 @@ Start from a hash (tip), follow `parent_hash` until parent is empty or missing. 
 
 ## Running
 
-1. Install dependencies (from `protobuf/`):
+1. Install dependencies
 
    ```bash
    pip install -r requirements.txt
@@ -108,7 +108,7 @@ Start from a hash (tip), follow `parent_hash` until parent is empty or missing. 
 3. Run the consumer:
 
    ```bash
-   cd protobuf && python consumer.py
+   python consumer.py
    ```
 
 **Schema:** [ParsedIdlBlockMessage](https://github.com/bitquery/streaming_protobuf/blob/main/solana/parsed_idl_block_message.proto).  
