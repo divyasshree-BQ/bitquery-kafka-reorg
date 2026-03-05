@@ -112,6 +112,7 @@ def apply_block_to_chain(
     slot: int,
     chain: dict[bytes, BlockInfo],
     tip_hash: bytes | None,
+    # NOTE: blocks with empty block_hash or parent_hash are skipped by the caller (consumer.py)
 ) -> tuple[bytes | None, list[bytes] | None]:
     """
     Update chain state for one new block. Reorg only when incoming branch length
@@ -132,13 +133,13 @@ def apply_block_to_chain(
     fork_point = find_fork_point(tip_hash, parent_hash, chain)
     if fork_point is None:
         logger.info(
-            "REORG: cannot find fork point for block %s (incoming parent not in chain). Adding block anyway.",
+            "REORG: cannot find fork point for block %s (incoming parent not in chain). Storing block, keeping current tip.",
             block_hash.hex()
         )
         parent_depth = get_chain_length(parent_hash, chain)
         depth = (parent_depth + 1) if parent_depth else 0
         chain[block_hash] = BlockInfo(slot=slot, parent_hash=parent_hash, depth=depth)
-        return (block_hash, None)
+        return (tip_hash, None)  # keep existing tip — do not promote a disconnected block
 
     current_head_length = get_chain_length(tip_hash, chain)
     parent_depth = get_chain_length(parent_hash, chain)
