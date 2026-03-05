@@ -54,15 +54,75 @@ is_reorg(new_parent_hash, tip_hash)  →  (tip_hash is not None) and (new_parent
 
 Comparing only slots would miss these cases.
 
+### Block chain tree
+
+```
+genesis
+   │
+   └──► [A] slot 100
+            │
+            ├──► [B] slot 101  ← canonical tip (depth 2)
+            │         ✕ orphaned when D arrives
+            │
+            └──► [C] slot 102  (depth 2, fork — no reorg yet, equal depth)
+                      │
+                      └──► [D] slot 103  ← new tip after reorg (depth 3 > 2)
+```
+
+A reorg only fires when the incoming fork branch becomes **strictly longer** than the current canonical tip. A competing block at equal depth is stored but does not trigger a rollback.
+
+---
+
+### `apply_block_to_chain()` — decision flow
+
+```
+New block arrives
+       │
+       ▼
+  tip_hash == None?
+  ├── yes ──► add as first block, done
+  └── no
+       │
+       ▼
+  parent_hash == tip_hash?        (is_reorg check)
+  ├── yes (no fork) ──► extend canonical chain, done
+  └── no (fork detected!)
+       │
+       ▼
+  find_fork_point()
+  ├── walk local chain backwards  → build visited set
+  │     tip → parent → parent → ...
+  └── walk fork chain backwards   → find first hash in visited
+        incoming_parent → its parent → ...
+               │
+               ▼
+        common ancestor found?
+        ├── no ──► add block silently, done (gap/unknown parent)
+        └── yes
+               │
+               ▼
+        incoming branch length > current head length?
+        ├── no  ──► keep current tip, store fork block, done
+        └── yes
+               │
+               ▼
+           🔁 REORG
+        get_orphaned_hashes()  → walk local chain: tip → fork point
+        pop orphaned blocks from chain
+        add new block as tip
+        return (new_tip, orphaned_list)
+```
+
+
 ### Reorg handling (three steps)
 
-1. **Detect fork**  
+1. **Detect fork**
    Incoming block’s `parent_hash` ≠ our `tip_hash` → we have a fork.
 
-2. **Find fork point (common ancestor)**  
-   Walk backwards from our tip; if the incoming block’s `parent_hash` is on that path, it’s the fork point. If not (e.g. gap or unknown parent), we add the block anyway and set it as tip.
+2. **Find fork point (common ancestor)**
+   Two-pass walk: first build a visited set by walking the local chain backwards from tip, then walk backwards from `incoming_parent_hash` until a hash in the visited set is found. Returns that common ancestor hash, or `None` if no ancestor is found (gap/unknown parent), in which case the block is added silently.
 
-3. **Compare branch lengths, then maybe roll back**  
+3. **Compare branch lengths, then maybe roll back**
    Current head length = `depth(tip)`. Incoming branch length = `1 + depth(parent)`. Only if **incoming length > current head length** do we orphan and roll back (remove blocks from tip down to fork point), add the new block, and set it as tip. Otherwise we add the block to the chain but keep the current tip. In this repo, `rollback_orphaned()` only logs the orphaned hashes; in production you would delete DB rows by those hashes.
 
 ### Flow in code
@@ -91,7 +151,6 @@ WALK_BACK(start_hash, chain):
 
 Start from a hash (tip), follow `parent_hash` until parent is empty or missing. Uses linear walk.
 
----
 
 ## Running
 
