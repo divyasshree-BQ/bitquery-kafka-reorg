@@ -70,6 +70,7 @@ def _process_batch(batch: list):
                 block_hash, parent_hash, slot, _chain, _tip_hash
             )
         if orphaned:
+            print(f"Orphaned {orphaned}")
             rollback_orphaned(orphaned)
         print(f"\nBlock {slot} | Txs {len(tx_block.Transactions)}")
         with processed_count_lock:
@@ -95,6 +96,10 @@ def process_message(buffer):
         slot = header.Slot
         block_hash = hash_bytes(header.Hash)
         parent_hash = hash_bytes(header.ParentHash)
+
+        if not block_hash or not parent_hash:
+            logger.debug("Skipping block at slot %d: empty hash or parent_hash", slot)
+            return
 
         batch = reorg_buffer.add(block_hash, parent_hash, slot, tx_block)
         if batch:
