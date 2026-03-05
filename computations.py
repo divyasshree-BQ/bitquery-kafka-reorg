@@ -38,9 +38,9 @@ def find_fork_point(
 ) -> bytes | None:
     """
     Find common ancestor: walk local chain backwards from local_tip_hash (add to visited),
-    then check whether incoming block's parent is in that set. With one block per message,
-    the only candidate for common ancestor is incoming_parent_hash itself.
-    Returns that hash if it's on our chain, else None (gap or unknown parent).
+    then walk backwards from incoming_parent_hash until a common hash is found.
+    This handles multi-block forks where the incoming block extends an already-forked branch.
+    Returns the common ancestor hash, or None if no common ancestor is found.
     """
     visited: set[bytes] = set()
     h: bytes | None = local_tip_hash
@@ -50,7 +50,16 @@ def find_fork_point(
         if not info:
             break
         h = info.parent_hash
-    return incoming_parent_hash if incoming_parent_hash in visited else None
+
+    h = incoming_parent_hash
+    while h:
+        if h in visited:
+            return h
+        info = chain.get(h)
+        if not info:
+            break
+        h = info.parent_hash
+    return None
 
 
 def get_chain_length(hash_val: bytes, chain: dict[bytes, BlockInfo]) -> int:
